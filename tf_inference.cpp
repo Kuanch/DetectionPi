@@ -37,22 +37,24 @@ Status ReadTensorFromImageFile(string file_name, const int input_height,
   const int wanted_channels = 3;
   tensorflow::Output image_reader;
 
-  image_reader = DecodeJpeg(root.WithOpName("jpeg_reader"), file_reader,
-                              DecodeJpeg::Channels(wanted_channels));
-
+  image_reader = DecodeJpeg(root.WithOpName("jpg_reader"), file_reader,
+                             DecodeJpeg::Channels(wanted_channels));
 
   auto float_caster =
       Cast(root.WithOpName("float_caster"), image_reader, tensorflow::DT_FLOAT);
 
-  auto dims_expander = ExpandDims(root, float_caster, 0);
+  auto dims_expander = ExpandDims(root.WithOpName("dim"), float_caster, 0);
+
   // Bilinearly resize the image to fit the required dimensions.
   auto resized = ResizeBilinear(
       root, dims_expander,
       Const(root.WithOpName("size"), {input_height, input_width}));
   // Subtract the mean and divide by the scale.
-  Div(root.WithOpName(output_name), Sub(root, resized, {input_mean}),
-      {input_std});
+  auto div = Div(root.WithOpName(output_name), Sub(root, {}, {input_mean}),{input_std});
 
+  // Since "normalized" operation would return image into float type, it need to cast back to uint.
+  auto uint8_caster =  Cast(root.WithOpName("uint8_caster"), resized, tensorflow::DT_UINT8);
+  
   // This runs the GraphDef network definition that we've just constructed, and
   // returns the results in the output tensor.
   tensorflow::GraphDef graph;
@@ -61,7 +63,7 @@ Status ReadTensorFromImageFile(string file_name, const int input_height,
   std::unique_ptr<tensorflow::Session> session(
       tensorflow::NewSession(tensorflow::SessionOptions()));
   TF_RETURN_IF_ERROR(session->Create(graph));
-  TF_RETURN_IF_ERROR(session->Run({}, {output_name}, {}, out_tensors));
+  TF_RETURN_IF_ERROR(session->Run({}, {"uint8_caster"}, {}, out_tensors));
   return Status::OK();
 }
 
@@ -101,25 +103,39 @@ int main(int argc, char* argv[])
   std::string image_path(argv[1]);
 
   int32 input_dim = 300;
-  int32 input_mean = 128;
-  int32 input_std = 128;
-  if (!ReadTensorFromImageFile(image_path, input_dim, input_dim, input_mean,
-                               input_std, &inputs).ok()) {
-    LOG(ERROR) << "Load image";
+  int32 input_mean = 0;
+  int32 input_std = 1;
+  Status loadInputTensor = ReadTensorFromImageFile(image_path, input_dim, input_dim, input_mean,
+                               input_std, &inputs);
+  if (!loadInputTensor.ok()) {
+    LOG(ERROR) << "Load image" << loadInputTensor;
     return -1;
   }
   std::cout << "Read images successfully!" << "\n";  
 
 
   std::vector<tensorflow::Tensor> outputs;
-  string input_layer = "image_tensor:0";
-  string output_layer = {"detection_boxes:0"};
-  if (!session->Run({{input_layer, inputs[0]}},
-                     {output_layer}, {}, &outputs).ok()) {
-    LOG(ERROR) << "Running model failed";
+  std::string input_layer = "image_tensor:0";
+  std::vector<string> output_layer = { "detection_boxes:0", "detection_scores:0", "detection_classes:0", "num_detections:0" };
+
+  Status readTensorStatus = session->Run({{input_layer, inputs[0]}},
+                     {output_layer}, {}, &outputs);
+
+  if (!readTensorStatus.ok()) {
+    LOG(ERROR) << "Running model failed" << readTensorStatus;
     return -1;
   }
 
-  ///home/sixigma/face_detection_model/data/img2.jpg
-  //array([0.23533039, 0.08384116, 0.38354808, 0.16164924], dtype=float32)
+  tensorflow::TTypes<float, 3>::Tensor boxes = outputs[0].flat_outer_dims<float,3>();
+  tensorflow::TTypes<float>::Flat scores = outputs[1].flat<float>();
+  tensorflow::TTypes<float>::Flat classes = outputs[2].flat<float>();
+  tensorflow::TTypes<float>::Flat num_detections = outputs[3].flat<float>();
+
+  LOG(INFO) << "num_detections:" << num_detections(0) << "," << outputs[0].shape().DebugString();
+
+  LOG(INFO) << "Highest score:" << scores(0) << ",class:" << classes(0)<< ",box:" << 
+        boxes(0,0,0) << "," << boxes(0,0,1) << "," << boxes(0,0,2)<< "," << boxes(0,0,3) << "\n";
+
+  return 0;
+
 }
