@@ -1,7 +1,7 @@
 # CMakeLists.txt
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.5.1)
 find_package(TensorflowCC REQUIRED)
-add_executable(tf_ex tensorflow.cpp)
+add_executable(tf_ex tf_inference.cpp)
 
 # With tensorflow_cc
 target_link_libraries(tf_ex TensorflowCC::Shared)
