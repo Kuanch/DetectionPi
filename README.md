@@ -1,12 +1,15 @@
-## DetectionPi
-Process images and detect object on raspberry pi with tensorflow and opencv.
+# DetectionPi
+Real-time face recognition on Raspberry pi.
 
-## Set up Tensorflow C++ API Library
+## ONNX and model optimization
+Switch tensorflow inference to ONNX since unavaliable tensorflow C++ stable API and impovring ONNX ecosystem.
+
+## Set up Tensorflow C++ API Library (Deprecated)
 This repository makes possible the usage of the TensorFlow C++ API from the outside of the TensorFlow source code folders and without the use of the Bazel build system, please refer to [Tensorflow C++ API](https://github.com/FloopCZ/tensorflow_cc).
 
-## Usage
-```
-mkdir build && cd build
-cmake .. && make
-./tf_ex "PATH_TO_INFERED_IMAGE" "PATH_TO_SAVED_MODEL"
-```
+## TODO
+- [x] Tensorflow SSD-MobileNetV2 to ONNX
+- [ ] Inference code
+- [ ] Deploy on Raspberry pi
+- [ ] YoloV4
+- [ ] Model Optimization
